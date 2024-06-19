@@ -39,12 +39,6 @@ const userSchema = new Schema({
         type: String,
         required: [true, 'password is required']
     },
-    fullname: {
-        type: String,
-        required: true,
-        trim: true,
-        index: true
-    },
     refreshToken: {
         type: String,
     },

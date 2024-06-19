@@ -1,9 +1,26 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js"
-import { User } from "../models/User.js";
+import { User } from "../models/user.modal.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
-import mongoose from "mongoose";
 import { Apiresponse } from "../utils/ApiResponse.js";
+
+
+const generateAccessAndRefreshToken = asyncHandler(async (userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+
+        user.refreshToken = refreshToken;  // add the refresh token in Database
+        await user.save({ validateBeforeSave: false });
+
+        return { accessToken, refreshToken }
+
+    } catch (error) {
+        throw new ApiError(500, "Somthing went wrong while generating refresh and access token");
+    }
+})
+
 
 const userRegister = asyncHandler(async (req, res) => {
     // username
@@ -28,17 +45,17 @@ const userRegister = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All fields are required ")
     }
 
-    const existUser = User.findOne({
+    const existUser = await User.findOne({
         $or: [{ email }, { username }],
     })
 
     if (existUser) {
-        throw new ApiError(409, "User Already Exist, Please try another usernam and email")
+        throw new ApiError(409, "User Already Exist, Please try another username and email")
     }
 
     const avatarLocalPath = req.files?.avatar[0]?.path;
     const coverImageLocalPath = req.files?.coverImage[0]?.path;
-    console.log(req.files);
+    // console.log(req.files);
 
     if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar files is required")
@@ -64,15 +81,98 @@ const userRegister = asyncHandler(async (req, res) => {
         "-password -refreshToken"  // it is used to unstored values in database
     )
 
-    if(!userCreated){
+    if (!userCreated) {
         throw new ApiError(404, "Something went wrong while user register")
     }
 
     return res.status(201).json(
-        new Apiresponse(200,userCreated,"User Register Successfully")
+        new Apiresponse(200, userCreated, "User Register Successfully")
     )
 
 })
 
 
-export { userRegister }
+
+const loginUser = asyncHandler(async (req, res, next) => {
+    const { username, email, password } = req.body;
+
+    // req body
+    // username or email validate
+    // find user in db 
+    // password check
+    // access and refresh token 
+    // send cookie
+
+    if (!(username || email)) {
+        throw new ApiError(400, "Username or Email is required")
+    }
+
+    const user = await User.findOne({
+        $or: [{ email }, { username }],
+    });
+
+    if (!password) {
+        throw new ApiError(400, "Password is required");
+    }
+
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Invalid Credentials");
+    }
+
+    const loggedInUser = await User.findById(user._id);
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+
+    // create cookie
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new Apiresponse(
+                200,
+                {
+                    user: refreshToken, accessToken, loggedInUser
+                },
+                "User Login Successfully")
+        )
+})
+
+
+const logOutUser = asyncHandler(async (req, res) => {
+    // logout also need a userId for find the user So, we need middleWare
+    const user = req.user._id;
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            // we can set any value in property in db using set 
+            $set: {
+                refreshToken: undefined
+            }
+        },
+        { new: true }
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(
+            new Apiresponse(200, {}, "User Logout Successfully")
+        )
+})
+
+export { userRegister, loginUser, logOutUser }
