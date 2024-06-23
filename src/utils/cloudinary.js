@@ -113,7 +113,7 @@ const uploadOnCloudinary = async (localFilePath) => {
     }
 }
 
-export const cloudinaryDelete = async (publicId) => {
+const cloudinaryDelete = async (publicId) => {
     try {
         console.log(publicId);
         const imageUrl = publicId.split('/').pop().split('.')[0];
@@ -122,6 +122,7 @@ export const cloudinaryDelete = async (publicId) => {
             //   throw new apiError(401,"Error while deleting data from cloudinary!")
         }
         console.log(responce)
+        return responce
     } catch (error) {
         console.log(error);
         return null
@@ -129,4 +130,4 @@ export const cloudinaryDelete = async (publicId) => {
 }
 
 
-export { uploadOnCloudinary }
+export { uploadOnCloudinary ,cloudinaryDelete}
